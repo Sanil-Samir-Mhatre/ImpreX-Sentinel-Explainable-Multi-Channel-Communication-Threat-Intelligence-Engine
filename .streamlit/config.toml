@@ -1,0 +1,15 @@
+[theme]
+# The primary color (Crimson Red) for interactive elements, buttons, and sliders
+primaryColor = "#D9381E"
+
+# The main background color (Pure White for the 60% base)
+backgroundColor = "#FFFFFF"
+
+# The secondary background color for the sidebar and metric cards (Slightly off-white to maintain cleanliness)
+secondaryBackgroundColor = "#F8F9FA"
+
+# Text color (Dark Slate for high readability against the white background)
+textColor = "#1E293B"
+
+# Font choice
+font = "sans serif"
