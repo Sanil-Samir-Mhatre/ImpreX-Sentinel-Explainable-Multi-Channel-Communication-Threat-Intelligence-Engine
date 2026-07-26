@@ -236,7 +236,7 @@ default_text = PRESETS.get(preset, "") if preset != "None" else ""
 # -----------------------------------------------------------------------------
 # 4. MAIN DASHBOARD UI
 # -----------------------------------------------------------------------------
-st.title("🛡️ IMPREX Sentinel — Threat Intelligence Dashboard")
+st.title("🛡️ IMPREX Sentinel — 3-Class NLP Threat Intelligence Engine")
 st.markdown("Automated **3-Class Semantic Text Analysis** isolating link reputation checks to focus strictly on linguistic threat context.")
 
 # Top Metrics Row
