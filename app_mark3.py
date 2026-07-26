@@ -193,7 +193,7 @@ gru_classifier, baseline_model = load_models()
 # -----------------------------------------------------------------------------
 with st.sidebar:
     if os.path.exists(logo_path):
-        st.image(logo_path, width=160)
+        st.image(logo_path, use_column_width=True)
     else:
         st.image("https://img.icons8.com/color/96/shield-with-signature.png", width=70)
     st.title(" ")
