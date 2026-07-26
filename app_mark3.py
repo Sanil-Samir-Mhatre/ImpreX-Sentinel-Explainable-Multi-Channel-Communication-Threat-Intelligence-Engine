@@ -27,7 +27,7 @@ from explainability import ThreatExplainer
 # 1. PAGE CONFIGURATION & THEME SETUP
 # -----------------------------------------------------------------------------
 model_dir = os.path.dirname(os.path.abspath(__file__))
-logo_path = os.path.join(model_dir, "Logo.jpg")
+logo_path = os.path.join(model_dir, "Logo_Retroify.png")
 
 st.set_page_config(
     page_title="IMPREX Sentinel | Threat Intelligence",
@@ -236,16 +236,8 @@ default_text = PRESETS.get(preset, "") if preset != "None" else ""
 # -----------------------------------------------------------------------------
 # 4. MAIN DASHBOARD UI
 # -----------------------------------------------------------------------------
-if os.path.exists(logo_path):
-    hcol1, hcol2 = st.columns([0.15, 0.85])
-    with hcol1:
-        st.image(logo_path, width=90)
-    with hcol2:
-        st.title("IMPREX Sentinel — Threat Intelligence Dashboard")
-        st.markdown("Automated **3-Class Semantic Text Analysis** isolating link reputation checks to focus strictly on linguistic threat context.")
-else:
-    st.title("🛡️ IMPREX Sentinel — Threat Intelligence Dashboard")
-    st.markdown("Automated **3-Class Semantic Text Analysis** isolating link reputation checks to focus strictly on linguistic threat context.")
+st.title("🛡️ IMPREX Sentinel — Threat Intelligence Dashboard")
+st.markdown("Automated **3-Class Semantic Text Analysis** isolating link reputation checks to focus strictly on linguistic threat context.")
 
 # Top Metrics Row
 mcol1, mcol2, mcol3, mcol4 = st.columns(4)
@@ -280,95 +272,96 @@ with tab_scan:
         
         scan_btn = st.button("🚨 SCAN MESSAGE FOR THREATS", type="primary", use_container_width=True)
         
-    with col_output:
-        st.subheader("2. Threat Analysis Output")
-        
-        if scan_btn or user_input.strip():
-            if not user_input.strip():
+    if scan_btn or user_input.strip():
+        if not user_input.strip():
+            with col_output:
                 st.warning("Please enter text or select a sample preset.")
-            else:
-                with st.spinner("Analyzing linguistic patterns & token weights..."):
-                    # Preprocess input text
-                    cleaned = clean_text(user_input)
-                    masked = mask_urls(user_input, token="urltoken")
-                    
-                    # Predict using selected engine
-                    if "GRU" in engine_choice and gru_classifier is not None:
-                        probs = gru_classifier.predict_proba(user_input)[0]
-                    elif baseline_model is not None:
-                        probs = baseline_model.predict_proba([cleaned])[0]
+        else:
+            with st.spinner("Analyzing linguistic patterns & token weights..."):
+                # Preprocess input text
+                cleaned = clean_text(user_input)
+                masked = mask_urls(user_input, token="urltoken")
+                
+                # Predict using selected engine
+                if "GRU" in engine_choice and gru_classifier is not None:
+                    probs = gru_classifier.predict_proba(user_input)[0]
+                elif baseline_model is not None:
+                    probs = baseline_model.predict_proba([cleaned])[0]
+                else:
+                    st.error("Model engine artifacts not found. Please run train_mark3.py.")
+                    st.stop()
+                
+                pred_class = int(probs.argmax())
+                ham_prob, spam_prob, phish_prob = probs[0], probs[1], probs[2]
+                
+                # Determine Status Badge
+                if pred_class == 2 or phish_prob >= confidence_threshold:
+                    status_html = '<div class="badge-critical">CRITICAL THREAT: PHISHING / SMISHING DETECTED</div>'
+                elif pred_class == 1:
+                    status_html = '<div class="badge-spam">SUSPICIOUS: SPAM PROMOTION</div>'
+                else:
+                    status_html = '<div class="badge-safe">SAFE: LEGITIMATE COMMUNICATIONS (HAM)</div>'
+                
+            with col_output:
+                st.subheader("2. Threat Analysis Output")
+                st.markdown(status_html, unsafe_allow_html=True)
+                st.write("")
+                
+                # Probability Progress Breakdown
+                pcol1, pcol2, pcol3 = st.columns(3)
+                with pcol1:
+                    st.metric("Ham Probability", f"{ham_prob*100:.1f}%")
+                    st.progress(float(ham_prob))
+                with pcol2:
+                    st.metric("Spam Probability", f"{spam_prob*100:.1f}%")
+                    st.progress(float(spam_prob))
+                with pcol3:
+                    st.metric("Phishing Probability", f"{phish_prob*100:.1f}%")
+                    st.progress(float(phish_prob))
+
+            with col_input:
+                st.divider()
+                # Highlighted Token Analysis
+                st.markdown("**🔍 High-Risk Token Highlights:**")
+                flagged_words = {"urgent", "verify", "account", "suspended", "password", "security", "credentials", "urltoken", "immediately", "bank"}
+                words = user_input.split()
+                highlighted_html = []
+                for w in words:
+                    w_str = str(w)
+                    w_clean = re.sub(r'[^a-zA-Z0-9]', '', w_str).lower()
+                    escaped_w = html.escape(w_str)
+                    if "http" in w_str.lower() or "www." in w_str.lower() or w_clean == "urltoken":
+                        highlighted_html.append(f'<span class="token-highlight-url">{escaped_w} (URL)</span>')
+                    elif w_clean in flagged_words:
+                        highlighted_html.append(f'<span class="token-highlight-critical">{escaped_w}</span>')
                     else:
-                        st.error("Model engine artifacts not found. Please run train_mark3.py.")
-                        st.stop()
-                    
-                    pred_class = int(probs.argmax())
-                    ham_prob, spam_prob, phish_prob = probs[0], probs[1], probs[2]
-                    
-                    # Determine Status Badge
-                    if pred_class == 2 or phish_prob >= confidence_threshold:
-                        status_html = '<div class="badge-critical">CRITICAL THREAT: PHISHING / SMISHING DETECTED</div>'
-                    elif pred_class == 1:
-                        status_html = '<div class="badge-spam">SUSPICIOUS: SPAM PROMOTION</div>'
-                    else:
-                        status_html = '<div class="badge-safe">SAFE: LEGITIMATE COMMUNICATIONS (HAM)</div>'
-                    
-                    st.markdown(status_html, unsafe_allow_html=True)
-                    st.write("")
-                    
-                    # Probability Progress Breakdown
-                    pcol1, pcol2, pcol3 = st.columns(3)
-                    with pcol1:
-                        st.metric("Ham Probability", f"{ham_prob*100:.1f}%")
-                        st.progress(float(ham_prob))
-                    with pcol2:
-                        st.metric("Spam Probability", f"{spam_prob*100:.1f}%")
-                        st.progress(float(spam_prob))
-                    with pcol3:
-                        st.metric("Phishing Probability", f"{phish_prob*100:.1f}%")
-                        st.progress(float(phish_prob))
+                        highlighted_html.append(escaped_w)
+                
+                st.markdown(f'<div style="background-color: #F8F9FA; padding: 14px; border-radius: 8px; border: 1px solid #E2E8F0; line-height: 1.8;">{" ".join(highlighted_html)}</div>', unsafe_allow_html=True)
 
-                    st.divider()
-
-                    # Highlighted Token Analysis
-                    st.markdown("**🔍 High-Risk Token Highlights:**")
-                    flagged_words = {"urgent", "verify", "account", "suspended", "password", "security", "credentials", "urltoken", "immediately", "bank"}
-                    words = user_input.split()
-                    highlighted_html = []
-                    for w in words:
-                        w_str = str(w)
-                        w_clean = re.sub(r'[^a-zA-Z0-9]', '', w_str).lower()
-                        escaped_w = html.escape(w_str)
-                        if "http" in w_str.lower() or "www." in w_str.lower() or w_clean == "urltoken":
-                            highlighted_html.append(f'<span class="token-highlight-url">{escaped_w} (URL)</span>')
-                        elif w_clean in flagged_words:
-                            highlighted_html.append(f'<span class="token-highlight-critical">{escaped_w}</span>')
-                        else:
-                            highlighted_html.append(escaped_w)
-                    
-                    st.markdown(f'<div style="background-color: #F8F9FA; padding: 14px; border-radius: 8px; border: 1px solid #E2E8F0; line-height: 1.8;">{" ".join(highlighted_html)}</div>', unsafe_allow_html=True)
-
-                    # Explainable AI (LIME) Section
-                    st.divider()
-                    with st.expander("📊 View LIME Token Importance Feature Contribution", expanded=True):
-                        try:
-                            explainer = ThreatExplainer(
-                                gru_classifier.predict_proba if "GRU" in engine_choice else baseline_model.predict_proba
-                            )
-                            exp, _ = explainer.explain_instance(user_input, num_features=8)
-                            
-                            lime_list = exp.as_list()
-                            tokens = [item[0] for item in lime_list]
-                            scores = [item[1] for item in lime_list]
-                            
-                            fig, ax = plt.subplots(figsize=(8, 3.5))
-                            colors = ['#D9381E' if s > 0 else '#10B981' for s in scores]
-                            ax.barh(tokens, scores, color=colors)
-                            ax.axvline(0, color='#64748B', linestyle='--', linewidth=0.8)
-                            ax.set_title('LIME Feature Contribution Scores')
-                            ax.set_xlabel('Contribution to Threat Class Probability')
-                            st.pyplot(fig)
-                        except Exception as e:
-                            st.info(f"LIME visualization note: {e}")
+            with col_output:
+                # Explainable AI (LIME) Section
+                st.divider()
+                with st.expander("📊 View LIME Token Importance Feature Contribution", expanded=True):
+                    try:
+                        explainer = ThreatExplainer(
+                            gru_classifier.predict_proba if "GRU" in engine_choice else baseline_model.predict_proba
+                        )
+                        exp, _ = explainer.explain_instance(user_input, num_features=8)
+                        
+                        lime_list = exp.as_list()
+                        tokens = [item[0] for item in lime_list]
+                        scores = [item[1] for item in lime_list]
+                        
+                        fig, ax = plt.subplots(figsize=(8, 3.5))
+                        colors = ['#D9381E' if s > 0 else '#10B981' for s in scores]
+                        ax.barh(tokens, scores, color=colors)
+                        ax.axvline(0, color='#64748B', linestyle='--', linewidth=0.8)
+                        ax.set_title('LIME Feature Contribution Scores')
+                        ax.set_xlabel('Contribution to Threat Class Probability')
+                        st.pyplot(fig)
+                    except Exception as e:
+                        st.info(f"LIME visualization note: {e}")
 
 # -----------------------------------------------------------------------------
 # TAB 2: BATCH CSV PROCESSING
