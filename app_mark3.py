@@ -196,8 +196,8 @@ with st.sidebar:
         st.image(logo_path, width=160)
     else:
         st.image("https://img.icons8.com/color/96/shield-with-signature.png", width=70)
-    st.title("IMPREX Sentinel")
-    st.caption("3-Class NLP Threat Intelligence Engine")
+    st.title(" ")
+    st.caption(" ")
     
     st.divider()
     
