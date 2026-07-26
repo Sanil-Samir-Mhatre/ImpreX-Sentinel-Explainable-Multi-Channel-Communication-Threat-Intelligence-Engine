@@ -12,12 +12,15 @@ import os
 import re
 import html
 import pickle
+import io
 import numpy as np
 import pandas as pd
 import streamlit as st
 import matplotlib.pyplot as plt
 import seaborn as sns
 import torch
+import speech_recognition as sr
+from pydub import AudioSegment
 
 from preprocessing import clean_text, mask_urls
 from models import BaselineMLModel, GRUClassifier
@@ -189,6 +192,31 @@ def load_models():
 gru_classifier, baseline_model = load_models()
 
 # -----------------------------------------------------------------------------
+# 2.5 AUDIO TRANSCRIPTION HELPER
+# -----------------------------------------------------------------------------
+def transcribe_audio(file_bytes, filename):
+    try:
+        audio = None
+        if filename.endswith('.mp3'):
+            audio = AudioSegment.from_mp3(io.BytesIO(file_bytes))
+        elif filename.endswith('.wav'):
+            audio = AudioSegment.from_wav(io.BytesIO(file_bytes))
+        else:
+            return None, "Unsupported file format. Please upload .wav or .mp3"
+            
+        wav_io = io.BytesIO()
+        audio.export(wav_io, format="wav")
+        wav_io.seek(0)
+        
+        recognizer = sr.Recognizer()
+        with sr.AudioFile(wav_io) as source:
+            audio_data = recognizer.record(source)
+            text = recognizer.recognize_google(audio_data)
+            return text, None
+    except Exception as e:
+        return None, f"Error during transcription: {e}"
+
+# -----------------------------------------------------------------------------
 # 3. SIDEBAR CONTROLS & PRESET SELECTION
 # -----------------------------------------------------------------------------
 with st.sidebar:
@@ -263,28 +291,59 @@ with tab_scan:
     
     with col_input:
         st.subheader("1. Message Content Input")
-        user_input = st.text_area(
-            "Paste SMS text or email message body below:",
-            value=default_text,
-            height=200,
-            placeholder="Type or paste suspicious email body or SMS message..."
-        )
+        
+        input_mode = st.radio("Select Input Mode", ["Text Input", "Voice Call Upload (Vishing)"], horizontal=True)
+        
+        user_input_text = ""
+        uploaded_audio = None
+        
+        if input_mode == "Text Input":
+            user_input_text = st.text_area(
+                "Paste SMS text or email message body below:",
+                value=default_text,
+                height=200,
+                placeholder="Type or paste suspicious email body or SMS message..."
+            )
+        else:
+            uploaded_audio = st.file_uploader("Upload Audio Recording (.wav, .mp3)", type=["wav", "mp3"])
+            user_input_text = ""
         
         scan_btn = st.button("🚨 SCAN MESSAGE FOR THREATS", type="primary", use_container_width=True)
         
-    if scan_btn or user_input.strip():
-        if not user_input.strip():
+    # We trigger scan if text is provided or if audio is uploaded and scan is clicked.
+    if scan_btn or (input_mode == "Text Input" and user_input_text.strip()):
+        transcribed_text = None
+        
+        if input_mode == "Voice Call Upload (Vishing)" and uploaded_audio is not None:
             with col_output:
-                st.warning("Please enter text or select a sample preset.")
+                with st.spinner("Transcribing audio via Google Web Speech API..."):
+                    bytes_data = uploaded_audio.getvalue()
+                    text, err = transcribe_audio(bytes_data, uploaded_audio.name)
+                    if text:
+                        transcribed_text = text
+                    else:
+                        st.error(err)
+                        st.stop()
+                        
+        final_input = transcribed_text if transcribed_text else user_input_text
+        
+        if not final_input.strip():
+            with col_output:
+                st.warning("Please enter text or upload an audio file.")
         else:
+            if transcribed_text:
+                with col_input:
+                    st.success("Transcription complete!")
+                    st.info(f"**Transcribed Text:**\n\n\"{transcribed_text}\"")
+
             with st.spinner("Analyzing linguistic patterns & token weights..."):
                 # Preprocess input text
-                cleaned = clean_text(user_input)
-                masked = mask_urls(user_input, token="urltoken")
+                cleaned = clean_text(final_input)
+                masked = mask_urls(final_input, token="urltoken")
                 
                 # Predict using selected engine
                 if "GRU" in engine_choice and gru_classifier is not None:
-                    probs = gru_classifier.predict_proba(user_input)[0]
+                    probs = gru_classifier.predict_proba(final_input)[0]
                 elif baseline_model is not None:
                     probs = baseline_model.predict_proba([cleaned])[0]
                 else:
@@ -324,7 +383,7 @@ with tab_scan:
                 # Highlighted Token Analysis
                 st.markdown("**🔍 High-Risk Token Highlights:**")
                 flagged_words = {"urgent", "verify", "account", "suspended", "password", "security", "credentials", "urltoken", "immediately", "bank"}
-                words = user_input.split()
+                words = final_input.split()
                 highlighted_html = []
                 for w in words:
                     w_str = str(w)
@@ -347,7 +406,7 @@ with tab_scan:
                         explainer = ThreatExplainer(
                             gru_classifier.predict_proba if "GRU" in engine_choice else baseline_model.predict_proba
                         )
-                        exp, _ = explainer.explain_instance(user_input, num_features=8)
+                        exp, _ = explainer.explain_instance(final_input, num_features=8)
                         
                         lime_list = exp.as_list()
                         tokens = [item[0] for item in lime_list]
